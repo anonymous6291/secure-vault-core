@@ -11,13 +11,17 @@ public class Vault {
     private static final String CONFIG_FILE_NAME = "config.data";
     private static final String ENCRYPTED_LOG_FILE_NAME = "log.data";
     private static final String DECRYPTED_LOG_FILE_NAME = "log.data1";
+    private static final int VAULT_KEY_MINIMUM_LENGTH = 5;
     private final FileSystem vaultFileSystem;
     private final ConfigurationManager configurationManager;
     private final String vaultPath;
+    private char[] password;
     private char[] vaultKey;
     private volatile boolean isVaultOpen;
 
     Vault(String path, boolean create, char[] key) throws Exception {
+        assertVaultKeyRequirement(key);
+        this.password = key.clone();
         Path vaultPath;
         if (create) {
             vaultPath = Paths.get(path, VAULT_FOLDER_NAME);
@@ -39,7 +43,6 @@ public class Vault {
         try {
             configurationManager = new ConfigurationManager(getPath(CONFIG_FILE_NAME), create, key);
         } catch (AEADBadTagException e) {
-            vaultFileSystem.close();
             throw new VaultException("Invalid password.");
         }
         vaultKey = configurationManager.getVaultKey();
@@ -49,18 +52,71 @@ public class Vault {
         isVaultOpen = true;
     }
 
+    private void assertVaultKeyRequirement(char[] key) {
+        if (key == null || key.length < VAULT_KEY_MINIMUM_LENGTH) {
+            throw new VaultException("Vault key should be at least [" + VAULT_KEY_MINIMUM_LENGTH + "] length long.");
+        }
+    }
+
     private Path getPath(String subPath) {
         return vaultFileSystem.getPath(vaultPath, subPath);
+    }
+
+    private boolean different(char[] x, char[] y) {
+        if (x == y) {
+            return false;
+        }
+        if (x == null || y == null) {
+            return true;
+        }
+        if (x.length != y.length) {
+            return true;
+        }
+        int n = x.length;
+        for (int i = 0; i < n; i++) {
+            if (x[i] != y[i]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void changeVaultKey(char[] password, char[] newKey) throws Exception {
+        assertVaultKeyRequirement(newKey);
+        if (different(this.password, password)) {
+            Logger.logSevere("Changing of vault key failed due to wrong initial key.");
+            throw new VaultException("Wrong vault key. Initial key not changed.");
+        }
+        configurationManager.changeKey(newKey.clone());
+        vaultKey = configurationManager.getVaultKey();
+        this.password = newKey.clone();
+        Logger.logWarn("Vault key changed.");
     }
 
     public boolean isVaultOpen() {
         return isVaultOpen;
     }
 
+    public void lockdownVault(long duration) {
+        configurationManager.enableLockdownMode(duration);
+        closeVault();
+    }
+
+    public void selfDestructVault(char[] password) {
+        if (different(this.password, password)) {
+            Logger.logSevere("Vault destruction failed due to wrong vault key.");
+            throw new VaultException("Wrong vault key. Vault not destructed.");
+        }
+        Logger.logWarn("Vault entered self destruction mode.");
+        configurationManager.selfDestruct();
+        closeVault();
+    }
+
     public void closeVault() {
         if (!isVaultOpen()) {
             return;
         }
+        Logger.logInfo("Closing vault.");
         try {
             isVaultOpen = false;
             vaultKey = null;

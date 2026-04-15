@@ -17,7 +17,7 @@ public class ConfigurationManager {
     private static final int KEY_LENGTH = 50;
     private static final int IV_LENGTH = 12;
     private static final int SALT_LENGTH = 16;
-    private static final int MAX_TRIES = 2;
+    private static final int MAX_TRIES = 5;
     private static final int PER_DAY_MAX_TRIES = 15;
     private static final long WRONG_TRY_DELAY_MILLIS = 5 * 60 * 1000;
     private static final ObjectMapper json = new ObjectMapper();
@@ -25,7 +25,7 @@ public class ConfigurationManager {
     private static final Base64.Decoder base64Decoder = Base64.getDecoder();
     private final Path configurationPath;
     private final Configuration configuration;
-    private final char[] vaultKey;
+    private char[] vaultKey;
 
     static {
         json.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -91,20 +91,30 @@ public class ConfigurationManager {
         }
     }
 
+    public void changeKey(char[] newKey) throws Exception {
+        byte[] iv = base64Decoder.decode(configuration.getIv());
+        byte[] salt = base64Decoder.decode(configuration.getSalt());
+        byte[] old = base64Decoder.decode(new String(vaultKey));
+        Cipher ciper = CipherManager.getCipher(newKey, iv, salt, true);
+        byte[] encrypted = ciper.doFinal(old);
+        configuration.setKey(base64Encoder.encodeToString(encrypted));
+        vaultKey = newKey;
+    }
+
     private byte[] generateRandomBytes(int len) {
         byte[] random = new byte[len];
         SecureRandom secureRandom = new SecureRandom();
         secureRandom.nextBytes(random);
         return random;
     }
-
-    public boolean isLockdownModeEnabled() {
-        return configuration.getLockdown();
-    }
-
     public void enableLockdownMode(long duration) {
         configuration.setLockdown(true);
         configuration.setLockdown_end_time(new Date(duration + System.currentTimeMillis()));
+    }
+
+    public void selfDestruct() {
+        configuration.setIs_destructed(true);
+        configuration.setKey(base64Encoder.encodeToString(generateRandomBytes(configuration.getKey().length())));
     }
 
     public boolean isSelfDestructEnabled() {
