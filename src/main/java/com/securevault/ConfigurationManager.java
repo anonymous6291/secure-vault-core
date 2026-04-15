@@ -8,7 +8,6 @@ import javax.crypto.Cipher;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Date;
 
@@ -25,7 +24,7 @@ public class ConfigurationManager {
     private static final Base64.Decoder base64Decoder = Base64.getDecoder();
     private final Path configurationPath;
     private final Configuration configuration;
-    private char[] vaultKey;
+    private final char[] vaultKey;
 
     static {
         json.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -35,10 +34,10 @@ public class ConfigurationManager {
         configurationPath = config;
         ConfigurationDefaults.Data configurationManagerData = ConfigurationDefaults.getDefault(ConfigurationManager.class);
         if (create) {
-            byte[] generatedChar = generateRandomBytes(KEY_LENGTH);
+            byte[] generatedChar = RandomValueGenerator.generateSecureBytes(KEY_LENGTH);
             vaultKey = base64Encoder.encodeToString(generatedChar).toCharArray();
-            byte[] iv = generateRandomBytes(IV_LENGTH);
-            byte[] salt = generateRandomBytes(SALT_LENGTH);
+            byte[] iv = RandomValueGenerator.generateSecureBytes(IV_LENGTH);
+            byte[] salt = RandomValueGenerator.generateSecureBytes(SALT_LENGTH);
             Cipher cipher = CipherManager.getCipher(key, iv, salt, true);
             byte[] encr = cipher.doFinal(generatedChar);
             configuration = new Configuration(VERSION, false, new Date(), 0, false, false, 0, base64Encoder.encodeToString(encr), base64Encoder.encodeToString(iv), base64Encoder.encodeToString(salt));
@@ -66,7 +65,7 @@ public class ConfigurationManager {
             } catch (AEADBadTagException e) {
                 int tries = configuration.getTries() + 1;
                 if (configuration.getSelf_destruct() && configuration.getSelf_destruct_limit() <= tries) {
-                    String modifiedKey = base64Encoder.encodeToString(generateRandomBytes(configuration.getKey().length()));
+                    String modifiedKey = base64Encoder.encodeToString(RandomValueGenerator.generateSecureBytes(configuration.getKey().length()));
                     configuration.setKey(modifiedKey);
                     configuration.setIs_destructed(true);
                     configuration.setSelf_destruct(false);
@@ -95,18 +94,11 @@ public class ConfigurationManager {
         byte[] iv = base64Decoder.decode(configuration.getIv());
         byte[] salt = base64Decoder.decode(configuration.getSalt());
         byte[] old = base64Decoder.decode(new String(vaultKey));
-        Cipher ciper = CipherManager.getCipher(newKey, iv, salt, true);
-        byte[] encrypted = ciper.doFinal(old);
+        Cipher cipher = CipherManager.getCipher(newKey, iv, salt, true);
+        byte[] encrypted = cipher.doFinal(old);
         configuration.setKey(base64Encoder.encodeToString(encrypted));
-        vaultKey = newKey;
     }
 
-    private byte[] generateRandomBytes(int len) {
-        byte[] random = new byte[len];
-        SecureRandom secureRandom = new SecureRandom();
-        secureRandom.nextBytes(random);
-        return random;
-    }
     public void enableLockdownMode(long duration) {
         configuration.setLockdown(true);
         configuration.setLockdown_end_time(new Date(duration + System.currentTimeMillis()));
@@ -114,7 +106,7 @@ public class ConfigurationManager {
 
     public void selfDestruct() {
         configuration.setIs_destructed(true);
-        configuration.setKey(base64Encoder.encodeToString(generateRandomBytes(configuration.getKey().length())));
+        configuration.setKey(base64Encoder.encodeToString(RandomValueGenerator.generateSecureBytes(configuration.getKey().length())));
     }
 
     public boolean isSelfDestructEnabled() {

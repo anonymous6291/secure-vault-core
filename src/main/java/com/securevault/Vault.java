@@ -15,13 +15,13 @@ public class Vault {
     private final FileSystem vaultFileSystem;
     private final ConfigurationManager configurationManager;
     private final String vaultPath;
+    private final char[] vaultKey;
     private char[] password;
-    private char[] vaultKey;
     private volatile boolean isVaultOpen;
 
-    Vault(String path, boolean create, char[] key) throws Exception {
-        assertVaultKeyRequirement(key);
-        this.password = key.clone();
+    Vault(String path, boolean create, char[] password) throws Exception {
+        assertVaultKeyRequirement(password);
+        this.password = password.clone();
         Path vaultPath;
         if (create) {
             vaultPath = Paths.get(path, VAULT_FOLDER_NAME);
@@ -41,7 +41,7 @@ public class Vault {
         this.vaultPath = vaultPath.toString();
         vaultFileSystem = vaultPath.getFileSystem();
         try {
-            configurationManager = new ConfigurationManager(getPath(CONFIG_FILE_NAME), create, key);
+            configurationManager = new ConfigurationManager(getPath(CONFIG_FILE_NAME), create, password);
         } catch (AEADBadTagException e) {
             throw new VaultException("Invalid password.");
         }
@@ -88,7 +88,6 @@ public class Vault {
             throw new VaultException("Wrong vault key. Initial key not changed.");
         }
         configurationManager.changeKey(newKey.clone());
-        vaultKey = configurationManager.getVaultKey();
         this.password = newKey.clone();
         Logger.logWarn("Vault key changed.");
     }
@@ -119,7 +118,10 @@ public class Vault {
         Logger.logInfo("Closing vault.");
         try {
             isVaultOpen = false;
-            vaultKey = null;
+            int n = vaultKey.length;
+            for (int i = 0; i < n; i++) {
+                vaultKey[i] = 0;
+            }
             configurationManager.writeConfiguration();
             Logger.close();
         } catch (Exception e) {
