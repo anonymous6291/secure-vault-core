@@ -96,6 +96,7 @@ public class ConfigurationManager {
         Cipher cipher = CipherManager.getCipher(newKey, iv, salt, Cipher.ENCRYPT_MODE);
         byte[] encrypted = cipher.doFinal(old);
         configuration.setKey(base64Encoder.encodeToString(encrypted));
+        writeConfiguration();
     }
 
     public void enableLockdownMode(long duration) {

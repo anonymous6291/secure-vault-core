@@ -54,7 +54,7 @@ public class Vault {
 
     private void assertVaultKeyRequirement(char[] key) {
         if (key == null || key.length < VAULT_KEY_MINIMUM_LENGTH) {
-            throw new VaultException("Vault key should be at least [" + VAULT_KEY_MINIMUM_LENGTH + "] length long.");
+            throw new VaultException("Vault password must be at least [" + VAULT_KEY_MINIMUM_LENGTH + "] length long.");
         }
     }
 
@@ -81,15 +81,16 @@ public class Vault {
         return false;
     }
 
-    public void changeVaultKey(char[] password, char[] newKey) throws Exception {
+    public void changeVaultPassword(char[] currentPassword, char[] newKey) throws Exception {
         assertVaultKeyRequirement(newKey);
-        if (different(this.password, password)) {
-            Logger.logSevere("Changing of vault key failed due to wrong initial key.");
-            throw new VaultException("Wrong vault key. Initial key not changed.");
+        if (different(password, currentPassword)) {
+            Logger.logSevere("Changing of vault password failed due to wrong initial password.");
+            throw new VaultException("Wrong vault password. Initial password not changed.");
         }
-        configurationManager.changeKey(newKey.clone());
-        this.password = newKey.clone();
-        Logger.logWarn("Vault key changed.");
+        char[] cloned = newKey.clone();
+        configurationManager.changeKey(cloned);
+        password = cloned;
+        Logger.logWarn("Vault password changed.");
     }
 
     public boolean isVaultOpen() {
