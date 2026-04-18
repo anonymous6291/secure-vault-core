@@ -70,7 +70,6 @@ public class FileTransferManager implements FileTransferMonitor {
         }
         dataTransferred.addAndGet(-last);
         dataToBeTransferred.addAndGet(-fileTransferHandler.getDataToBeTransferred());
-        numberOfPendingFiles.decrementAndGet();
         try {
             if (result.get() == FileTransferStatus.FAILED) {
                 Logger.logError("[" + fileTransferHandler.getFromFileName() + "] failed to transfer.");
@@ -78,6 +77,7 @@ public class FileTransferManager implements FileTransferMonitor {
             }
         } catch (Exception _) {
         }
+        numberOfPendingFiles.decrementAndGet();
         fileTransferLock.release();
     }
 
@@ -154,6 +154,15 @@ public class FileTransferManager implements FileTransferMonitor {
             return -1;
         }
         return (dataTransferred.get() * 100.0) / data;
+    }
+
+    @Override
+    public void waitToComplete() {
+        while (numberOfPendingFiles.get() != 0) ;
+    }
+
+    public enum FileTransferStatus {
+        FAILED, PENDING, COMPLETED
     }
 
     static class FileTransferHandler implements Callable<FileTransferStatus> {
@@ -246,9 +255,5 @@ public class FileTransferManager implements FileTransferMonitor {
         public String getToFileName() {
             return to.toFile().getName();
         }
-    }
-
-    public enum FileTransferStatus {
-        FAILED, PENDING, COMPLETED
     }
 }

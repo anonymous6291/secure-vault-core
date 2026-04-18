@@ -1,9 +1,9 @@
 package com.securevault;
 
 public class FileData {
-    private String originalName;
     private final String maskedName;
     private final long fileLength;
+    private String originalName;
     private String filePath;
 
     FileData(String originalName, String maskedName, long fileLength, String filePath) {

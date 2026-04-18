@@ -43,6 +43,7 @@ public class FileManager implements FileTransferManagerListener {
         allFiles = new HashMap<>();
         File dataFile = fileDataPath.toFile();
         String lastFileName = "0";
+        Logger.logInfo("FileManager started.");
         if (dataFile.length() > 0) {
             BufferedInputStream bufferedInputStream = new BufferedInputStream(Files.newInputStream(fileDataPath));
             iv = bufferedInputStream.readNBytes(ConfigurationDefaults.IV_LENGTH);
@@ -53,9 +54,9 @@ public class FileManager implements FileTransferManagerListener {
             cipherInputStream.close();
             String[] data = fileData.split("\n");
             int n = data.length;
-            for (int i = 0; i < n; i += 2) {
-                String path = data[i];
-                String originalName = data[i + 1];
+            for (int i = 1; i < n; i += 2) {
+                String path = data[i - 1];
+                String originalName = data[i];
                 File file = fileStoragePath.resolve(path).toFile();
                 if (!file.exists()) {
                     Logger.logError("File [" + originalName + "] has entry but doesn't exist, skipping it.");
@@ -218,6 +219,8 @@ public class FileManager implements FileTransferManagerListener {
         if (!lock()) {
             return;
         }
+        fileTransferManager.shutdown();
+        fileTransferManager.waitToComplete();
         try {
             BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(Files.newOutputStream(fileDataPath));
             bufferedOutputStream.write(iv);

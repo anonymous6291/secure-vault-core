@@ -1,6 +1,7 @@
 package com.securevault;
 
 import javax.crypto.AEADBadTagException;
+import java.io.FileNotFoundException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +15,7 @@ public class Vault {
     private static final int VAULT_KEY_MINIMUM_LENGTH = 5;
     private final FileSystem vaultFileSystem;
     private final ConfigurationManager configurationManager;
+    private final FileManager fileManager;
     private final String vaultPath;
     private final char[] vaultKey;
     private char[] password;
@@ -48,6 +50,7 @@ public class Vault {
         vaultKey = configurationManager.getVaultKey();
         Logger.init(getPath(ENCRYPTED_LOG_FILE_NAME), getPath(DECRYPTED_LOG_FILE_NAME), vaultKey);
         Logger.logInfo("Vault opened.");
+        fileManager = new FileManager(vaultPath, vaultKey);
         IO.println(new String(vaultKey));
         isVaultOpen = true;
     }
@@ -79,6 +82,14 @@ public class Vault {
             }
         }
         return false;
+    }
+
+    public void putFiles(Path from) throws FileNotFoundException {
+        fileManager.addFiles(from);
+    }
+
+    public void getFiles(String from, Path to) throws FileNotFoundException {
+        fileManager.getFiles(from, to);
     }
 
     public void changeVaultPassword(char[] currentPassword, char[] newKey) throws Exception {
@@ -121,6 +132,7 @@ public class Vault {
             isVaultOpen = false;
             int n = vaultKey.length;
             configurationManager.writeConfiguration();
+            fileManager.close();
             Logger.close();
             for (int i = 0; i < n; i++) {
                 vaultKey[i] = 0;
