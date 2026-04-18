@@ -6,6 +6,7 @@ import javax.crypto.CipherOutputStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -13,8 +14,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Stream;
 
-public class FileManager {
+public class FileManager implements FileTransferManagerListener {
     private static final String FILE_STORAGE_FOLDER_NAME = "files";
     private static final String FILE_DATA_NAME = "files.data";
     private static final String FILE_DATA_END_MARKER = "#############################END#############################";
@@ -25,7 +27,8 @@ public class FileManager {
     private final byte[] iv;
     private final byte[] salt;
     private final Map<String, FileData> allFiles;
-    private volatile char[] lastFileName;
+    private final FileTransferManager fileTransferManager;
+    private volatile char[] nextFileName;
 
     FileManager(Path basePath, char[] vaultKey) throws Exception {
         this.vaultKey = vaultKey;
@@ -74,10 +77,52 @@ public class FileManager {
             iv = RandomValueGenerator.generateSecureBytes(ConfigurationDefaults.IV_LENGTH);
             salt = RandomValueGenerator.generateSecureBytes(ConfigurationDefaults.SALT_LENGTH);
         }
-        this.lastFileName = lastFileName.toCharArray();
+        fileTransferManager = new FileTransferManager(vaultKey, this);
+        fileTransferManager.start();
         if (!allFiles.isEmpty()) {
-            incrementFileName();
+            incrementNextFileName();
         }
+    }
+
+    @Override
+    public String getFileName(Path from, Path to, FileTransferMode mode) {
+        if (mode == FileTransferMode.DECRYPT) {
+            return allFiles.get(from.getFileName().toString()).getOriginalName();
+        } else {
+            String fileName = new String(nextFileName);
+            incrementNextFileName();
+            return fileName;
+        }
+    }
+
+    @Override
+    public void fileTransferCompleted(Path from, Path to, FileTransferMode mode) {
+        if (mode == FileTransferMode.ENCRYPT) {
+            while (!lock()) ;
+            try {
+                File toFile = to.toFile();
+                String fromFileName = from.getFileName().toString();
+                FileData fileData = new FileData(fromFileName, toFile.getName(), toFile.length(), to.toString());
+                allFiles.put(toFile.getName(), fileData);
+            } finally {
+                unlock();
+            }
+        }
+    }
+
+    private void incrementNextFileName() {
+        for (int i = nextFileName.length - 1; i >= 0; i--) {
+            if (nextFileName[i] == '9') {
+                nextFileName[i] = '0';
+            } else {
+                nextFileName[i]++;
+                return;
+            }
+        }
+        int n = nextFileName.length;
+        char[] nextFileName = new char[n + 1];
+        Arrays.fill(nextFileName, 0, n + 1, '0');
+        this.nextFileName = nextFileName;
     }
 
     private boolean lock() {
@@ -104,60 +149,19 @@ public class FileManager {
         return true;
     }
 
-    private void incrementFileName() {
-        for (int i = lastFileName.length - 1; i >= 0; i--) {
-            if (lastFileName[i] == '9') {
-                lastFileName[i] = '0';
-            } else {
-                lastFileName[i]++;
-                return;
-            }
+    public void addFiles(Path from) throws FileNotFoundException {
+        if (!Files.exists(from)) {
+            throw new FileNotFoundException("[" + from + "] doesn't exist.");
         }
-        int n = lastFileName.length;
-        char[] nextFileName = new char[n + 1];
-        Arrays.fill(nextFileName, 0, n + 1, '0');
-        lastFileName = nextFileName;
+        fileTransferManager.transferFiles(from, fileStoragePath, FileTransferMode.ENCRYPT);
     }
 
-    public List<FileData> getFilesList() {
-        if (!lock()) {
-            return null;
+    public void getFiles(String from, Path to) throws FileNotFoundException {
+        Path fromPath = fileStoragePath.resolve(from);
+        if (!Files.exists(fromPath)) {
+            throw new FileNotFoundException("[" + from + "] doesn't exist.");
         }
-        List<FileData> fileDataList = List.copyOf(allFiles.values());
-        unlock();
-        Logger.logInfo("All files list accessed.");
-        return fileDataList;
-    }
-
-    private int addFilesRecursively(File current, Path pathToCopy) throws Exception {
-        if (current.isFile()) {
-            try {
-                return 1;
-            } catch (Exception e) {
-                return 0;
-            }
-        } else {
-            int result = 0;
-            Path nextPath = pathToCopy.resolve(current.getName());
-            File[] subFiles = current.listFiles();
-            if (subFiles != null) {
-                for (File file : subFiles) {
-                    result += addFilesRecursively(file, nextPath);
-                }
-            }
-            return result;
-        }
-    }
-
-    public int addFiles(File current, String pathToCopy) throws Exception {
-        if (!lock()) {
-            return 0;
-        }
-        try {
-            return addFilesRecursively(current, fileStoragePath.resolve(pathToCopy));
-        } finally {
-            unlock();
-        }
+        fileTransferManager.transferFiles(fromPath, to, FileTransferMode.DECRYPT);
     }
 
     public boolean changeFileName(String maskedName, String newOriginalName) {
@@ -168,6 +172,46 @@ public class FileManager {
         }
         fileData.setOriginalName(newOriginalName);
         return true;
+    }
+
+    private void deleteFile0(Path filePath) {
+        if (Files.isDirectory(filePath)) {
+            try (Stream<Path> files = Files.list(filePath)) {
+                files.forEach(this::deleteFile0);
+                Files.delete(filePath);
+            } catch (Exception e) {
+                Logger.logError("Failed to delete file [" + filePath + "] : " + e);
+            }
+        } else {
+            try {
+                Files.delete(filePath);
+                allFiles.remove(filePath.getFileName().toString());
+            } catch (Exception e) {
+                Logger.logError("Failed to delete file [" + filePath + "] : " + e);
+            }
+        }
+    }
+
+    public void deleteFile(String path) {
+        if (!lock()) {
+            return;
+        }
+        Path fileToBeDeleted = fileStoragePath.resolve(path);
+        if (Files.exists(fileToBeDeleted)) {
+            Logger.logWarn("Deleting file [" + path + "] .");
+            deleteFile0(fileToBeDeleted);
+        }
+        unlock();
+    }
+
+    public List<FileData> getFilesList() {
+        if (!lock()) {
+            return null;
+        }
+        List<FileData> fileDataList = List.copyOf(allFiles.values());
+        unlock();
+        Logger.logInfo("All files list accessed.");
+        return fileDataList;
     }
 
     public void close() throws Exception {
