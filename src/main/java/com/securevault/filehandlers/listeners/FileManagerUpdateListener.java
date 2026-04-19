@@ -8,7 +8,7 @@ public interface FileManagerUpdateListener {
 
     void setFileTransferMonitor(FileTransferMonitor fileTransferMonitor);
 
-    int askForResponse(List<String> query);
+    int askForResponse(String query, List<String> options);
 
     void newUpdate(String update);
 }

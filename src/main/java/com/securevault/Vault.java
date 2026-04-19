@@ -10,6 +10,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 public class Vault {
     private static final String VAULT_FOLDER_NAME = "Secure Vault";
@@ -22,7 +23,6 @@ public class Vault {
     private final FileManager fileManager;
     private final String vaultPath;
     private final char[] vaultKey;
-    private final FileManagerUpdateListener fileManagerUpdateListener;
     private char[] password;
     private volatile boolean isVaultOpen;
 
@@ -55,7 +55,6 @@ public class Vault {
         vaultKey = configurationManager.getVaultKey();
         Logger.init(getPath(ENCRYPTED_LOG_FILE_NAME), getPath(DECRYPTED_LOG_FILE_NAME), vaultKey);
         Logger.logInfo("Vault opened.");
-        this.fileManagerUpdateListener = fileManagerUpdateListener;
         fileManager = new FileManager(vaultPath, vaultKey, fileManagerUpdateListener);
         IO.println(new String(vaultKey));
         isVaultOpen = true;
@@ -96,6 +95,18 @@ public class Vault {
 
     public void getFiles(Path from, Path to) throws FileNotFoundException {
         fileManager.getFiles(from, to);
+    }
+
+    public void deleteFile(Path path) {
+        fileManager.deleteFile(path);
+    }
+
+    public void deleteDirectory(Path path) {
+        fileManager.deleteDirectory(path);
+    }
+
+    public List<String> getFilesList() {
+        return fileManager.getFilesList();
     }
 
     public void changeVaultPassword(char[] currentPassword, char[] newKey) throws Exception {

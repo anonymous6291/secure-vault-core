@@ -87,8 +87,8 @@ public class Logger {
 
     public static synchronized void log(String message, LogType logType) {
         if (!(initialized && lock())) {
-            IO.println("[" + logType + "] : " + message);
         }
+        IO.println("[" + logType + "] : " + message);
         try {
             logFileWriter.write((new Date() + " [" + logType + "] : " + message + "\n").getBytes());
             logFileWriter.flush();

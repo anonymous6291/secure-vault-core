@@ -3,38 +3,44 @@ package com.securevault;
 import com.securevault.filehandlers.FileTransferMonitor;
 import com.securevault.filehandlers.listeners.FileManagerUpdateListener;
 
+import java.nio.file.Path;
+import java.util.List;
+
 public class Main {
     static void main() throws Exception {
         String password1 = "WORLD";
         String password = "Hello";
+        Path path;
         FileManagerUpdateListener fileManagerUpdateListener = new FileManagerUpdateListener() {
             @Override
             public void setFileTransferMonitor(FileTransferMonitor fileTransferMonitor) {
             }
 
             @Override
-            public ResponseType askForResponse(String query) {
-                return ResponseType.YES;
+            public int askForResponse(String query, List<String> options) {
+                return Integer.parseInt(IO.readln(query + "\nOptions:\n" + options));
             }
 
             @Override
             public void newUpdate(String update) {
-
+                IO.println("Update:\n" + update);
             }
         };
-        //Vault vault = new Vault(System.getProperty("user.dir"), true, password.toCharArray());
+        //Vault vault = new Vault(System.getProperty("user.dir"), true, password.toCharArray(), fileManagerUpdateListener);
         Vault vault = new Vault(System.getProperty("user.dir") + "/Secure Vault", false, password.toCharArray(), fileManagerUpdateListener);
         //Logger.clearLogs();
         //vault.changeVaultPassword(password.toCharArray(), password1.toCharArray());
-        try {
-            //vault.putFiles(Path.of("/home/anonymous/Desktop/text.txt"));
-        } catch (Exception e) {
-            IO.println(e);
-        }
-        String logs = Logger.getLogs(100);
-        IO.println("Logs :\n" + logs);
-        if (logs.length() > 400) {
-            //Logger.clearLogs();
+        String option;
+        while (!(option = IO.readln("Enter the option:")).equals("E")) {
+            switch (option) {
+                case "pf" -> vault.putFiles(Path.of(IO.readln("Path:")));
+                case "gf" -> vault.getFiles(Path.of(IO.readln("From:")), Path.of(IO.readln("To:")));
+                case "df" -> vault.deleteFile(Path.of(IO.readln("Path:")));
+                case "dd" -> vault.deleteDirectory(Path.of(IO.readln("Path:")));
+                case "gl" -> IO.println(vault.getFilesList());
+                case "cl" -> Logger.clearLogs();
+                case "l" -> IO.println(Logger.getLogs(200));
+            }
         }
         vault.closeVault();
     }
