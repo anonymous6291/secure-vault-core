@@ -1,4 +1,4 @@
-package com.securevault;
+package com.securevault.filehandlers;
 
 import java.util.List;
 
@@ -10,6 +10,4 @@ public interface FileTransferMonitor {
     List<String> getFailedFilesList();
 
     double getProgress();
-
-    void waitToComplete();
 }

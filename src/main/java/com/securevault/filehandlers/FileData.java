@@ -1,4 +1,6 @@
-package com.securevault;
+package com.securevault.filehandlers;
+
+import java.nio.file.Path;
 
 public class FileData {
     private final String maskedName;
@@ -6,7 +8,7 @@ public class FileData {
     private String originalName;
     private String filePath;
 
-    FileData(String originalName, String maskedName, long fileLength, String filePath) {
+    public FileData(String originalName, String maskedName, long fileLength, String filePath) {
         this.originalName = originalName;
         this.maskedName = maskedName;
         this.fileLength = fileLength;
@@ -35,5 +37,13 @@ public class FileData {
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public Path getOriginalFilePath() {
+        return Path.of(filePath, originalName);
+    }
+
+    public Path getMaskedFilePath() {
+        return Path.of(filePath, maskedName);
     }
 }

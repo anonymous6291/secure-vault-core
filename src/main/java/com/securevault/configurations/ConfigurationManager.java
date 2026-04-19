@@ -1,4 +1,4 @@
-package com.securevault;
+package com.securevault.configurations;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,7 +29,7 @@ public class ConfigurationManager {
     private final Configuration configuration;
     private final char[] vaultKey;
 
-    ConfigurationManager(Path config, boolean create, char[] key) throws Exception {
+    public ConfigurationManager(Path config, boolean create, char[] key) throws Exception {
         configurationPath = config;
         ConfigurationDefaults.Data configurationManagerData = ConfigurationDefaults.getDefault(ConfigurationManager.class);
         if (create) {
@@ -250,14 +250,3 @@ public class ConfigurationManager {
     }
 }
 
-class LockdownModeException extends RuntimeException {
-    LockdownModeException(String message) {
-        super(message);
-    }
-}
-
-class VaultDestructedException extends RuntimeException {
-    VaultDestructedException() {
-        super("Vault is destructed.");
-    }
-}

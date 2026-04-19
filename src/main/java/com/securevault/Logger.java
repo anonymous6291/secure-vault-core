@@ -1,5 +1,8 @@
 package com.securevault;
 
+import com.securevault.configurations.CipherManager;
+import com.securevault.configurations.ConfigurationDefaults;
+
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;

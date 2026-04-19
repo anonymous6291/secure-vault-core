@@ -1,5 +1,9 @@
 package com.securevault;
 
+import com.securevault.configurations.ConfigurationManager;
+import com.securevault.filehandlers.FileManager;
+import com.securevault.filehandlers.listeners.FileManagerUpdateListener;
+
 import javax.crypto.AEADBadTagException;
 import java.io.FileNotFoundException;
 import java.nio.file.FileSystem;
@@ -18,10 +22,11 @@ public class Vault {
     private final FileManager fileManager;
     private final String vaultPath;
     private final char[] vaultKey;
+    private final FileManagerUpdateListener fileManagerUpdateListener;
     private char[] password;
     private volatile boolean isVaultOpen;
 
-    Vault(String path, boolean create, char[] password) throws Exception {
+    public Vault(String path, boolean create, char[] password, FileManagerUpdateListener fileManagerUpdateListener) throws Exception {
         assertVaultKeyRequirement(password);
         this.password = password.clone();
         Path vaultPath;
@@ -50,7 +55,8 @@ public class Vault {
         vaultKey = configurationManager.getVaultKey();
         Logger.init(getPath(ENCRYPTED_LOG_FILE_NAME), getPath(DECRYPTED_LOG_FILE_NAME), vaultKey);
         Logger.logInfo("Vault opened.");
-        fileManager = new FileManager(vaultPath, vaultKey);
+        this.fileManagerUpdateListener = fileManagerUpdateListener;
+        fileManager = new FileManager(vaultPath, vaultKey, fileManagerUpdateListener);
         IO.println(new String(vaultKey));
         isVaultOpen = true;
     }
@@ -88,7 +94,7 @@ public class Vault {
         fileManager.addFiles(from);
     }
 
-    public void getFiles(String from, Path to) throws FileNotFoundException {
+    public void getFiles(Path from, Path to) throws FileNotFoundException {
         fileManager.getFiles(from, to);
     }
 

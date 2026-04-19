@@ -1,4 +1,10 @@
-package com.securevault;
+package com.securevault.filehandlers;
+
+import com.securevault.Logger;
+import com.securevault.configurations.CipherManager;
+import com.securevault.configurations.ConfigurationDefaults;
+import com.securevault.configurations.RandomValueGenerator;
+import com.securevault.filehandlers.listeners.FileTransferManagerListener;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherOutputStream;
@@ -12,7 +18,6 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
 
 public class FileTransferManager implements FileTransferMonitor {
     private static final int MAX_PARALLEL_FILE_TRANSFERS = 5;
@@ -32,19 +37,19 @@ public class FileTransferManager implements FileTransferMonitor {
     FileTransferManager(char[] key, FileTransferManagerListener fileTransferManagerListener) {
         this.key = key;
         this.fileTransferManagerListener = fileTransferManagerListener;
-        shutdown = true;
+        shutdown = false;
     }
 
     private void start0() {
-        if (!isShutdown()) {
+        if (isShutdown()) {
             return;
         }
-        shutdown = false;
-        while (!shutdown) {
+        while (!pendingFiles.isEmpty() || !shutdown) {
             if (!pendingFiles.isEmpty()) {
                 try {
                     fileTransferLock.acquire();
-                    new Thread(() -> transferFile(pendingFiles.poll())).start();
+                    FileTransferHandler fileTransferHandler = pendingFiles.poll();
+                    new Thread(() -> transferFile(fileTransferHandler)).start();
                 } catch (Exception _) {
                 }
             } else {
@@ -77,53 +82,41 @@ public class FileTransferManager implements FileTransferMonitor {
             }
         } catch (Exception _) {
         }
+        fileTransferManagerListener.fileTransferCompleted(fileTransferHandler.from, fileTransferHandler.to, fileTransferHandler.mode);
         numberOfPendingFiles.decrementAndGet();
         fileTransferLock.release();
     }
 
     public void start() {
-        if (!isShutdown()) {
+        if (isShutdown()) {
             return;
         }
         new Thread(this::start0).start();
     }
 
-    private void traverseAndAddFiles(Path from, Path to, FileTransferMode mode) {
-        if (Files.isDirectory(from)) {
-            try (Stream<Path> allFiles = Files.list(from)) {
-                Path newPath = to.resolve(from.getFileName());
-                allFiles.forEach(subFiles -> traverseAndAddFiles(subFiles, newPath, mode));
-            } catch (Exception e) {
-                Logger.logError("Failed to list files of [" + from + "] : " + e);
-                failedFiles.add("Failed to list files of [" + from + "].");
-            }
-        } else if (Files.isRegularFile(from)) {
+    public void transferFiles(List<FileTransferData> fileTransferDataList) {
+        if (isShutdown()) {
+            throw new IllegalStateException("FileTransferManager is shutdown.");
+        }
+        fileTransferDataList.forEach(fileTransferData -> {
+            Path to = fileTransferData.to();
+            Path from = fileTransferData.from();
+            FileTransferHandler fileTransferHandler = new FileTransferHandler(from, to, key, fileTransferData.mode(), nextFileHandlerId++);
             try {
-                Files.createDirectories(to);
-                String fileName = fileTransferManagerListener.getFileName(from, to, mode);
-                FileTransferHandler fileTransferHandler = new FileTransferHandler(from, to.resolve(fileName), key, mode, nextFileHandlerId++);
+                Files.createDirectories(to.getParent());
                 pendingFiles.offer(fileTransferHandler);
                 dataToBeTransferred.addAndGet(fileTransferHandler.getDataToBeTransferred());
                 numberOfPendingFiles.incrementAndGet();
             } catch (Exception e) {
-                Logger.logError("Failed to transfer file [" + from + "] : " + e);
-                failedFiles.offer("Failed to transfer file [" + from + "] .");
+                failedFiles.offer("[" + fileTransferHandler.getFromFilePath() + "] failed to transfer.");
             }
-        } else {
-            Logger.logWarn("[" + from + "] is not a regular file, skipping it.");
-            failedFiles.add("[" + from + "] is not a regular file.");
-        }
-    }
-
-    public void transferFiles(Path from, Path to, FileTransferMode mode) {
-        if (isShutdown()) {
-            throw new IllegalStateException("FileTransferManager is shutdown.");
-        }
-        traverseAndAddFiles(from, to, mode);
+        });
     }
 
     public void shutdown() {
         shutdown = true;
+        while (numberOfPendingFiles.get() != 0) ;
+        executorService.shutdown();
     }
 
     public boolean isShutdown() {
@@ -154,11 +147,6 @@ public class FileTransferManager implements FileTransferMonitor {
             return -1;
         }
         return (dataTransferred.get() * 100.0) / data;
-    }
-
-    @Override
-    public void waitToComplete() {
-        while (numberOfPendingFiles.get() != 0) ;
     }
 
     public enum FileTransferStatus {
@@ -252,8 +240,13 @@ public class FileTransferManager implements FileTransferMonitor {
             return from.toFile().getName();
         }
 
+        public Path getFromFilePath() {
+            return from;
+        }
+
         public String getToFileName() {
             return to.toFile().getName();
         }
     }
 }
+
